@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pakistan Web GIS – Cities & Weather Stations</title>
+
+  <!-- Leaflet (CDN) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f2f5f3; }
+
+    /* ---------- Header ---------- */
+    header {
+      background: linear-gradient(90deg, #01411c, #0b6b35);
+      color: #fff;
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 8px;
+    }
+    header h1 { margin: 0; font-size: 1.5rem; }
+    header p  { margin: 2px 0 0; font-size: .85rem; opacity: .85; }
+    header .meta { font-size: .8rem; text-align: right; }
+
+    /* ---------- Map size ---------- */
+    #map {
+      width: 96%;
+      height: 75vh;          /* change this to resize the map */
+      margin: 16px auto;
+      border: 3px solid #01411c;
+      border-radius: 8px;
+    }
+
+    /* ---------- Legend ---------- */
+    .legend {
+      background: #fff; padding: 8px 12px; border-radius: 6px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.3); font-size: 13px; line-height: 22px;
+    }
+    .dot { display:inline-block; width:12px; height:12px; border-radius:50%;
+           border:2px solid #fff; box-shadow:0 0 2px #000; margin-right:6px; vertical-align:middle; }
+    .sq  { border-radius: 2px; }
+
+    /* ---------- Marker symbols ---------- */
+    .city-icon {
+      background:#c62828; border:2px solid #fff; border-radius:50%;
+      box-shadow:0 0 4px rgba(0,0,0,.6);
+    }
+    .station-icon {
+      background:#1565c0; border:2px solid #fff; border-radius:3px;
+      box-shadow:0 0 4px rgba(0,0,0,.6); transform: rotate(45deg);
+    }
+
+    /* ---------- Popups ---------- */
+    .popup h3 { margin: 0 0 6px; font-size: 16px; }
+    .popup table { border-collapse: collapse; width: 100%; }
+    .popup td { padding: 2px 6px; border-bottom: 1px solid #ddd; font-size: 13px; }
+    .popup td:first-child { font-weight: 600; color: #333; }
+
+    footer { text-align:center; font-size:.8rem; color:#555; padding-bottom:14px; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div>
+      <h1>🇵🇰 Pakistan Web GIS</h1>
+      <p>Interactive map of major cities and weather stations</p>
+    </div>
+    <div class="meta">
+      Lab Assignment No. 1<br />
+      Student: <b>Your Name</b> | Reg #: <b>XXXX</b>
+    </div>
+  </header>
+
+  <div id="map"></div>
+
+  <footer>Built with Leaflet.js · Basemaps: OpenStreetMap &amp; Esri World Imagery · Weather values are sample data</footer>
+
+  <script>
+    /* =========================================================
+       1. MAP INITIALISATION  (zoom / pan are built into Leaflet)
+       ========================================================= */
+    const map = L.map("map", { center: [30.3753, 69.3451], zoom: 5 });
+
+    /* =========================================================
+       2. BASEMAPS
+       ========================================================= */
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map); // default basemap
+
+    const satellite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, attribution: "Tiles &copy; Esri" }
+    );
+
+    /* =========================================================
+       3. DATA  (15+ cities, 15+ weather stations)
+       Cities: name, province, type
+       Stations: name, province, temperature (°C), rainfall (mm)
+       ========================================================= */
+    const cities = [
+      { name: "Islamabad",   province: "Islamabad Capital Territory", type: "National Capital",  lat: 33.6844, lng: 73.0479 },
+      { name: "Lahore",      province: "Punjab",                      type: "Provincial Capital", lat: 31.5204, lng: 74.3587 },
+      { name: "Karachi",     province: "Sindh",                       type: "Provincial Capital", lat: 24.8607, lng: 67.0011 },
+      { name: "Peshawar",    province: "Khyber Pakhtunkhwa",          type: "Provincial Capital", lat: 34.0151, lng: 71.5249 },
+      { name: "Quetta",      province: "Balochistan",                 type: "Provincial Capital", lat: 30.1798, lng: 66.9750 },
+      { name: "Gilgit",      province: "Gilgit-Baltistan",            type: "Regional Capital",   lat: 35.9208, lng: 74.3080 },
+      { name: "Muzaffarabad",province: "Azad Kashmir",                type: "Regional Capital",   lat: 34.3700, lng: 73.4711 },
+      { name: "Faisalabad",  province: "Punjab",                      type: "Industrial City",    lat: 31.4504, lng: 73.1350 },
+      { name: "Rawalpindi",  province: "Punjab",                      type: "Metropolitan City",  lat: 33.5651, lng: 73.0169 },
+      { name: "Multan",      province: "Punjab",                      type: "Historic City",      lat: 30.1575, lng: 71.5249 },
+      { name: "Hyderabad",   province: "Sindh",                       type: "Metropolitan City",  lat: 25.3960, lng: 68.3578 },
+      { name: "Gujranwala",  province: "Punjab",                      type: "Industrial City",    lat: 32.1877, lng: 74.1945 },
+      { name: "Sialkot",     province: "Punjab",                      type: "Industrial City",    lat: 32.4945, lng: 74.5229 },
+      { name: "Sukkur",      province: "Sindh",                       type: "Commercial City",    lat: 27.7052, lng: 68.8574 },
+      { name: "Gwadar",      province: "Balochistan",                 type: "Port City",          lat: 25.1216, lng: 62.3254 },
+      { name: "Abbottabad",  province: "Khyber Pakhtunkhwa",          type: "Hill Station City",  lat: 34.1688, lng: 73.2215 }
+    ];
+
+    const stations = [
+      { name: "Islamabad Met Station",  lat: 33.6167, lng: 73.1000, temp: 31, rain: 12 },
+      { name: "Lahore Met Station",     lat: 31.5497, lng: 74.3436, temp: 35, rain: 8  },
+      { name: "Karachi Met Station",    lat: 24.9056, lng: 67.1381, temp: 33, rain: 2  },
+      { name: "Peshawar Met Station",   lat: 34.0000, lng: 71.5800, temp: 34, rain: 5  },
+      { name: "Quetta Met Station",     lat: 30.2500, lng: 66.9400, temp: 24, rain: 1  },
+      { name: "Multan Met Station",     lat: 30.2000, lng: 71.4200, temp: 38, rain: 3  },
+      { name: "Bahawalpur Met Station", lat: 29.3956, lng: 71.6836, temp: 39, rain: 2  },
+      { name: "Skardu Met Station",     lat: 35.2971, lng: 75.6333, temp: 16, rain: 6  },
+      { name: "Chitral Met Station",    lat: 35.8518, lng: 71.7864, temp: 22, rain: 9  },
+      { name: "Jacobabad Met Station",  lat: 28.2769, lng: 68.4514, temp: 41, rain: 0  },
+      { name: "D.I. Khan Met Station",  lat: 31.8626, lng: 70.9019, temp: 37, rain: 4  },
+      { name: "Murree Met Station",     lat: 33.9070, lng: 73.3943, temp: 21, rain: 45 },
+      { name: "Gwadar Met Station",     lat: 25.1264, lng: 62.3225, temp: 32, rain: 0  },
+      { name: "Sargodha Met Station",   lat: 32.0740, lng: 72.6861, temp: 36, rain: 6  },
+      { name: "Zhob Met Station",       lat: 31.3410, lng: 69.4493, temp: 26, rain: 2  },
+      { name: "Hyderabad Met Station",  lat: 25.3920, lng: 68.3737, temp: 37, rain: 1  }
+    ];
+
+    // Province of each station (derived from name/location)
+    const stationProvince = {
+      "Islamabad Met Station": "Islamabad Capital Territory",
+      "Lahore Met Station": "Punjab", "Karachi Met Station": "Sindh",
+      "Peshawar Met Station": "Khyber Pakhtunkhwa", "Quetta Met Station": "Balochistan",
+      "Multan Met Station": "Punjab", "Bahawalpur Met Station": "Punjab",
+      "Skardu Met Station": "Gilgit-Baltistan", "Chitral Met Station": "Khyber Pakhtunkhwa",
+      "Jacobabad Met Station": "Sindh", "D.I. Khan Met Station": "Khyber Pakhtunkhwa",
+      "Murree Met Station": "Punjab", "Gwadar Met Station": "Balochistan",
+      "Sargodha Met Station": "Punjab", "Zhob Met Station": "Balochistan",
+      "Hyderabad Met Station": "Sindh"
+    };
+
+    /* =========================================================
+       4. CUSTOM MARKER SYMBOLS
+       ========================================================= */
+    const cityIcon = L.divIcon({
+      className: "city-icon", iconSize: [16, 16], iconAnchor: [8, 8], popupAnchor: [0, -8]
+    });
+    const stationIcon = L.divIcon({
+      className: "station-icon", iconSize: [14, 14], iconAnchor: [7, 7], popupAnchor: [0, -8]
+    });
+
+    /* =========================================================
+       5. GIS LAYERS + POPUPS
+       ========================================================= */
+    const cityLayer = L.layerGroup();
+    cities.forEach(c => {
+      L.marker([c.lat, c.lng], { icon: cityIcon, title: c.name })
+        .bindPopup(`
+          <div class="popup">
+            <h3>🏙️ ${c.name}</h3>
+            <table>
+              <tr><td>Name</td><td>${c.name}</td></tr>
+              <tr><td>Province</td><td>${c.province}</td></tr>
+              <tr><td>Type</td><td>${c.type}</td></tr>
+            </table>
+          </div>`)
+        .addTo(cityLayer);
+    });
+
+    const stationLayer = L.layerGroup();
+    stations.forEach(s => {
+      L.marker([s.lat, s.lng], { icon: stationIcon, title: s.name })
+        .bindPopup(`
+          <div class="popup">
+            <h3>🌦️ ${s.name}</h3>
+            <table>
+              <tr><td>Station Name</td><td>${s.name}</td></tr>
+              <tr><td>Province</td><td>${stationProvince[s.name]}</td></tr>
+              <tr><td>Temperature</td><td>${s.temp} °C</td></tr>
+              <tr><td>Rainfall</td><td>${s.rain} mm</td></tr>
+            </table>
+          </div>`)
+        .addTo(stationLayer);
+    });
+
+    cityLayer.addTo(map);
+    stationLayer.addTo(map);
+
+    /* =========================================================
+       6. LAYER CONTROL (basemap switch + layers on/off)
+       ========================================================= */
+    L.control.layers(
+      { "OpenStreetMap": osm, "Satellite Imagery": satellite },
+      { "Cities": cityLayer, "Weather Stations": stationLayer },
+      { collapsed: false }
+    ).addTo(map);
+
+    /* =========================================================
+       7. EXTRAS: legend + scale bar
+       ========================================================= */
+    const legend = L.control({ position: "bottomleft" });
+    legend.onAdd = () => {
+      const div = L.DomUtil.create("div", "legend");
+      div.innerHTML = `
+        <b>Legend</b><br>
+        <span class="dot" style="background:#c62828"></span>City<br>
+        <span class="dot sq" style="background:#1565c0"></span>Weather Station`;
+      return div;
+    };
+    legend.addTo(map);
+
+    L.control.scale({ imperial: false }).addTo(map);
+  </script>
+</body>
+</html>
